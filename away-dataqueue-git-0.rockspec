@@ -15,5 +15,6 @@ build = {
    type = "builtin",
    modules = {
       ['away.dataqueue'] = "away/dataqueue.lua",
+      ['away.dataqueue.service'] = "away/dataqueue/service.lua",
    }
 }

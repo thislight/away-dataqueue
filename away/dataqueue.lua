@@ -15,6 +15,7 @@
 -- You should have received a copy of the GNU General Public License
 -- along with away-luv.  If not, see <http://www.gnu.org/licenses/>.
 local away = require "away"
+local dataqueue_service = require "away.dataqueue.service"
 
 local function table_deep_copy(t1, t2)
     for k, v in pairs(t1) do
@@ -28,50 +29,6 @@ local function table_deep_copy(t1, t2)
 end
 
 local co = coroutine
-
-local dataqueue_service = {installed_flag = false, waited_dataqueue = {}}
-
-function dataqueue_service:install(scheduler)
-    if not self.installed_flag then
-        local keepalive_thread = coroutine.create(
-                                     function(self)
-                while true do
-                    co.yield()
-                    local process_queue = {}
-                    table.move(self.waited_dataqueue, 1, #self.waited_dataqueue,
-                               1, process_queue)
-                    for i,dataqueue in ipairs(process_queue) do
-                        if dataqueue:need_wake_back() then
-                            self:perform_wakeback(scheduler, dataqueue)
-                            dataqueue.waiting_threads = {}
-                            table.remove(self.waited_dataqueue, i)
-                        end
-                    end
-                end
-            end)
-        co.resume(keepalive_thread, self)
-        scheduler:set_auto_signal(function()
-            return {target_thread = keepalive_thread}
-        end)
-        self.installed_flag = true
-    end
-end
-
-function dataqueue_service:add_waited_queue(dq)
-    table.insert(self.waited_dataqueue, dq)
-end
-
-function dataqueue_service:perform_wakeback(scheduler, dq)
-    for _,thread in ipairs(dq.waiting_threads) do
-        if co.status(thread) ~= 'dead' then
-            scheduler:push_signal{
-                target_thread = thread,
-                kind = 'dataqueue_wake_back',
-                queue = dq
-            }
-        end
-    end
-end
 
 local dataqueue = {}
 
@@ -148,7 +105,4 @@ function dataqueue:is_marked_end() return self.error == 'ended' end
 
 function dataqueue:mark_end() self:set_error('ended') end
 
-return {
-    service = dataqueue_service,
-    dataqueue = dataqueue,
-}
+return dataqueue
