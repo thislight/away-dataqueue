@@ -1,6 +1,6 @@
 -- Copyright (C) 2020 thisLight
 -- 
--- This file is part of away-luv.
+-- This file is part of away-dataqueue.
 -- 
 -- away-luv is free software: you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
@@ -15,7 +15,17 @@
 -- You should have received a copy of the GNU General Public License
 -- along with away-luv.  If not, see <http://www.gnu.org/licenses/>.
 local away = require "away"
-local utils = require "away.luv.utils"
+
+local function table_deep_copy(t1, t2)
+    for k, v in pairs(t1) do
+        if type(v) == 'table' then
+            t2[k] = table_deep_copy(v, {})
+        else
+            t2[k] = v
+        end
+    end
+    return t2
+end
 
 local co = coroutine
 
@@ -65,7 +75,7 @@ end
 
 local dataqueue = {}
 
-function dataqueue:clone_to(new_t) return utils.table_deep_copy(self, new_t) end
+function dataqueue:clone_to(new_t) return table_deep_copy(self, new_t) end
 
 function dataqueue:create()
     return self:clone_to{data = {}, waiting_threads = {}}
