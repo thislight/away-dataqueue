@@ -15,14 +15,11 @@
 -- You should have received a copy of the GNU General Public License
 -- along with away-luv.  If not, see <http://www.gnu.org/licenses/>.
 local away = require 'away'
-local DataqueueService = require 'away.dataqueue.service'
 local Debugger = require 'away.debugger'
-local Dataqueue = require 'away.dataqueue'
+local Queue = require 'away.dataqueue'
 local Scheduler = away.scheduler
 
-Scheduler:install(DataqueueService)
-
-local global_queue = Dataqueue:create()
+local global_queue = Queue.create({})
 
 Scheduler:add_watcher('push_signal', function(_, signal) if not signal.is_auto_signal then print('push_signal', Debugger.topstring(Debugger:pretty_signal(signal))) end end)
 
@@ -31,32 +28,26 @@ Scheduler:add_watcher('run_thread', function(_, thread, signal) if not signal.is
 Scheduler:run_task(function()
     while true do
         print('call next()')
-        local val, err = global_queue:next()
+        local val = global_queue:get()
         if val then
             print(string.format("Hello %s!",val))
-        elseif err then
-            print(err)
+        elseif global_queue:endp() then
+            print(global_queue:endp())
             break
         end
     end
     Scheduler:stop()
 end)
 
-local function wait_for_wakeback()
-    coroutine.yield {
-        target_thread = away.get_current_thread()
-    }
-end
-
 Scheduler:run_task(function()
-    global_queue:add('J. Cooper')
-    wait_for_wakeback()
+    global_queue:put('J. Cooper')
+    away.wakeback_later()
     print('wakeback!')
-    global_queue:add('BT')
-    wait_for_wakeback()
+    global_queue:put('BT')
+    away.wakeback_later()
     print('wakeback!')
-    global_queue:add('Anderson')
-    wait_for_wakeback()
+    global_queue:put('Anderson')
+    away.wakeback_later()
     print('wakeback!')
     global_queue:mark_end()
 end)

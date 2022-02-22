@@ -9,12 +9,11 @@ description = {
    summary = "general purpose asynchronous data queue for away",
 }
 dependencies = {
-   "away >=0.0.3, <1"
+   "away >=0.1.3, <1"
 }
 build = {
    type = "builtin",
    modules = {
       ['away.dataqueue'] = "away/dataqueue.lua",
-      ['away.dataqueue.service'] = "away/dataqueue/service.lua",
    }
 }

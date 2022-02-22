@@ -15,94 +15,55 @@
 -- You should have received a copy of the GNU General Public License
 -- along with away-luv.  If not, see <http://www.gnu.org/licenses/>.
 local away = require "away"
-local dataqueue_service = require "away.dataqueue.service"
 
-local function table_deep_copy(t1, t2)
-    for k, v in pairs(t1) do
-        if type(v) == 'table' then
-            t2[k] = table_deep_copy(v, {})
-        else
-            t2[k] = v
+local queue_methods = {}
+
+function queue_methods.create(options)
+    return setmetatable({{
+        options.hwm or -1,
+        options.hwm_action or 'block',
+        nil, -- error
+    }}, {__index = queue_methods})
+end
+
+function queue_methods:put(value)
+    local hwm = self[1][1]
+    local hwm_action = self[1][2]
+    if hwm ~= -1 and self:length() >= hwm then
+        if hwm_action == 'block' then
+            while self:length() >= hwm do
+                away.wakeback_later()
+            end
+        elseif hwm_action == 'drop' then
+            return
         end
     end
-    return t2
+    self[#self+1] = value
 end
 
-local co = coroutine
-
-local dataqueue = {}
-
-function dataqueue:clone_to(new_t) return table_deep_copy(self, new_t) end
-
-function dataqueue:create()
-    return self:clone_to{data = {}, waiting_threads = {}}
+function queue_methods:length()
+    return #self - 1
 end
 
-function dataqueue:with_limit(limit, novalue_callback, limitreach_callback)
-    local obj = self:create()
-    obj.length_limit = limit
-    obj.novalue_callback = novalue_callback
-    obj.limitreach_callback = limitreach_callback
-    return obj
-end
-
-function dataqueue:add(value)
-    table.insert(self.data, value)
-    if self.length_limit and (#self.data >= self.length_limit) then
-        if self.limitreach_callback then self.limitreach_callback() end
+function queue_methods:try_get()
+    if #self > 1 then
+        return table.remove(self, 2)
     end
 end
 
-function dataqueue:next()
-    local value, err = self:try_next()
-    if value or err then
-        return value, err
-    else
-        if self.novalue_callback then
-            self:novalue_callback()
-        end
-        dataqueue_service:add_waited_queue(self)
-        table.insert(self.waiting_threads, away.get_current_thread())
-        away.wait_signal_like(nil, {kind = 'dataqueue_wake_back', queue = self})
-        return self:try_next()
+function queue_methods:get()
+    while #self <= 1 and (not self:endp()) do
+        away.wakeback_later()
     end
+    return self:try_get()
 end
 
-function dataqueue:listen(callback)
-    local d = {}
-    local thread = co.create(function(dq, descriptor, callback)
-        co.yield()
-        while true do
-            if descriptor.stop then break end
-            local value, err = dq:next()
-            callback(value, err, descriptor)
-        end
-    end)
-    d.dataqueue = self
-    co.resume(thread, self, d, callback)
-    away.schedule_thread(thread)
+function queue_methods:endp()
+    return self[1][3]
 end
 
-function dataqueue:try_next()
-    if self:has_data() then
-        return table.remove(self.data, 1), nil
-    elseif self:has_error() then
-        return nil, self.error
-    else
-        return nil, nil
-    end
+function queue_methods:mark_end(err)
+    self[1][3] = err or 'ended'
 end
 
-function dataqueue:has_data() return #self.data > 0 end
-
-function dataqueue:set_error(err) self.error = err end
-
-function dataqueue:has_error() return self.error ~= nil end
-
-function dataqueue:need_wake_back() return self:has_data() or self:has_error() end
-
-function dataqueue:is_marked_end() return self.error == 'ended' end
-
-function dataqueue:mark_end() self:set_error('ended') end
-
-return dataqueue
+return queue_methods

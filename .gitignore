@@ -3,3 +3,5 @@
 luarocks
 .luarocks
 
+/luarocks
+/.luarocks
